@@ -1,0 +1,14 @@
+{
+  "name": "lendsbay-contracts",
+  "version": "0.0.1",
+  "description": "ICO contracts and token of Lendsbay project",
+  "main": "truffle-config.js",
+  "directories": {
+    "test": "test"
+  },
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "author": "Lendsbay <info@lendsbay.ru>",
+  "license": "MIT"
+}
