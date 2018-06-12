@@ -44,7 +44,7 @@ contract('LendsbayToken', function (accounts) {
     it("should have transfer tokens correctly", async function () {
         const receiver = accounts[1];
         const senderBalance = expectedSupply;
-        const amount = 100 * 18;
+        const amount = 100 * (10 ** 18);
 
         // Check initial receiver balance
         let receiverBalance = await token.balanceOf(receiver);

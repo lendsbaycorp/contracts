@@ -1,6 +1,5 @@
 pragma solidity ^0.4.23;
 
-import "openzeppelin-solidity/contracts/math/SafeMath.sol";
 import "openzeppelin-solidity/contracts/token/ERC20/StandardToken.sol";
 
 /* Pretty common ERC20 token without any additional logic */
