@@ -17,23 +17,18 @@ import "openzeppelin-solidity/contracts/crowdsale/distribution/RefundableCrowdsa
 contract LendsbayPreICO is RefundableCrowdsale, WhitelistedCrowdsale, Pausable {
     using SafeMath for uint256;
 
+    mapping (address => uint256) public presale;
+
     /* Token price rates */
-    uint256 public constant RATE_PRESALE = 2006;
+    uint256 public constant RATE_PRESALE = 2007;
     uint256 public constant RATE_WEEK1 = 1820;
-    uint256 public constant RATE_WEEK2 = 1726;
+    uint256 public constant RATE_WEEK2 = 1727;
     uint256 public constant RATE_WEEK3 = 1633;
     uint256 public constant RATE_WEEK4 = 1563;
-    uint256 public constant RATE_WEEK5 = 1572;
+    uint256 public constant RATE_WEEK5 = 1493;
     uint256 public constant RATE_WEEK6 = 1423;
 
-    /* Limits of token sales at each period */
-    uint256 public tokensPresale = 860000 * (10 ** 18);
-    uint256 public tokensWeek1 = 780000 * (10 ** 18);
-    uint256 public tokensWeek2 = 740000 * (10 ** 18);
-    uint256 public tokensWeek3 = 700000 * (10 ** 18);
-    uint256 public tokensWeek4 = 670000 * (10 ** 18);
-    uint256 public tokensWeek5 = 640000 * (10 ** 18);
-    uint256 public tokensWeek6 = 610000 * (10 ** 18);
+    uint256 public raised = 0;
 
     enum Stage {
         Presale,
@@ -46,10 +41,11 @@ contract LendsbayPreICO is RefundableCrowdsale, WhitelistedCrowdsale, Pausable {
         Finished
     }
 
-    /* Stage public currentStage; */
-
     uint256 public softCap;     /* Amount of eth while it can be refunded */
     uint256 public startTime;   /* Start of Pre-ICO, although presale is allowed */
+
+    event WhitelistAdd(address _address);
+    event WhitelistRemove(address _address);
 
     constructor(
         uint256 _startTime,
@@ -59,7 +55,7 @@ contract LendsbayPreICO is RefundableCrowdsale, WhitelistedCrowdsale, Pausable {
         ) public
         Crowdsale(RATE_PRESALE, _wallet, _token)
         RefundableCrowdsale(_softCap)
-        TimedCrowdsale(getCurrentTime(), _startTime + 6 weeks)
+        TimedCrowdsale(now + 600, _startTime + 6 weeks)
     {
         softCap = _softCap;
         startTime = _startTime;
@@ -69,8 +65,6 @@ contract LendsbayPreICO is RefundableCrowdsale, WhitelistedCrowdsale, Pausable {
     function getCurrentTime() public view returns (uint) {
         return now;
     }
-
-    event testE(string msg, uint256 val);
 
     function getCurrentStage() public view returns (Stage) {
         for (uint i = 0; i < uint(Stage.Finished); i++) {
@@ -101,75 +95,83 @@ contract LendsbayPreICO is RefundableCrowdsale, WhitelistedCrowdsale, Pausable {
         return 0;
     }
 
-    function getRemainingTokens() public view returns (uint256) {
-        Stage currentStage = getCurrentStage();
-        if (currentStage == Stage.Presale) {
-            return tokensPresale;
-        } else if (currentStage == Stage.Week1) {
-            return tokensWeek1;
-        } else if (currentStage == Stage.Week2) {
-            return tokensWeek2;
-        } else if (currentStage == Stage.Week3) {
-            return tokensWeek3;
-        } else if (currentStage == Stage.Week4) {
-            return tokensWeek4;
-        } else if (currentStage == Stage.Week5) {
-            return tokensWeek5;
-        } else if (currentStage == Stage.Week6) {
-            return tokensWeek6;
-        }
-        return 0;
+   /* Overriding Zeppelin's Crowdsale to calculate current price */
+    function _getTokenAmount(uint256 _weiAmount) internal view returns (uint256) {
+        return tokensForWei(msg.sender, _weiAmount);
     }
 
-    function setRemainingTokens(uint256 sold) internal {
-        Stage currentStage = getCurrentStage();
-        if (currentStage == Stage.Presale) {
-            tokensPresale -= sold;
-        } else if (currentStage == Stage.Week1) {
-            tokensWeek1 -= sold;
-        } else if (currentStage == Stage.Week2) {
-            tokensWeek2 -= sold;
-        } else if (currentStage == Stage.Week3) {
-            tokensWeek3 -= sold;
-        } else if (currentStage == Stage.Week4) {
-            tokensWeek4 -= sold;
-        } else if (currentStage == Stage.Week5) {
-            tokensWeek5 -= sold;
-        } else if (currentStage == Stage.Week6) {
-            tokensWeek6 -= sold;
-        }
+    modifier onlyWhileOpen {
+        require(getCurrentTime() <= closingTime);
+        _;
+    }
+   
+    function hasClosed() public view returns (bool) {
+        return getCurrentTime() > closingTime;
     }
 
-    function tokensForWei(uint256 _weiAmount) internal view returns (uint256) {
+    function inWhitelist(address _beneficiary) public view returns (bool) {
+        return whitelist[_beneficiary];
+    }
+
+    function addToWhitelist(address _beneficiary) external onlyOwner {
+        whitelist[_beneficiary] = true;
+        emit WhitelistAdd(_beneficiary);
+    }
+
+    function removeFromWhitelist(address _beneficiary) external onlyOwner {
+        whitelist[_beneficiary] = false;
+        emit WhitelistRemove(_beneficiary);
+    }
+
+
+    function tokensForWei(address _buyer, uint256 _weiAmount) internal view returns (uint256) {
         uint256 rate_ = getCurrentRate();
+        if (rate_ != RATE_PRESALE && presale[_buyer] > 0) {
+            uint256 presoldWei = _weiAmount;
+            if (presale[_buyer] < presoldWei) {
+                presoldWei = presale[_buyer];
+            }
+            uint256 bought = RATE_PRESALE.mul(presoldWei);
+            
+            if (_weiAmount > presoldWei) {
+                bought = bought.add(rate_.mul(_weiAmount - presoldWei));
+            }
+            return bought;
+        }
         return rate_.mul(_weiAmount);
     }
 
-    /* Overriding Zeppelin's Crowdsale to calculate current price */
-    function _getTokenAmount(uint256 _weiAmount) internal view returns (uint256) {
-        return tokensForWei(_weiAmount);
+    function _updatePurchasingState(address _beneficiary, uint256 _weiAmount) internal {
+        if (presale[_beneficiary] > 0) {
+            if (presale[_beneficiary] > _weiAmount) {
+                presale[_beneficiary] = presale[msg.sender].sub(_weiAmount);
+            } else {
+                presale[_beneficiary] = 0;
+            }
+        }
     }
 
-    function _preValidatePurchase(address _beneficiary, uint256 _weiAmount) internal {
-        super._preValidatePurchase(_beneficiary, _weiAmount);
-        /* setCurrentStage(); */
-        uint256 tokens = tokensForWei(_weiAmount);
-        require(tokens <= getRemainingTokens());
+    function addToPresale(address _buyer, uint256 _wei) external onlyOwner {
+        presale[_buyer] = _wei;
     }
 
-    function _updatePurchasingState(address /* _beneficiary */, uint256 _weiAmount) internal {
-        setRemainingTokens(tokensForWei(_weiAmount));
+    function removeFromPresale(address _buyer) external onlyOwner {
+        presale[_buyer] = 0;
     }
 
-    /* Override code from openzeppelin's TimedCrowdsale to use
-     * getCurrentTime() instead of block.timestamp. Although
-     * TimedCrowdsale constructor checks remain same. */
-    modifier onlyWhileOpen {
-        require(getCurrentTime() >= openingTime && getCurrentTime() <= closingTime);
-        _;
+    function presaleAmount(address _buyer) public view returns (uint256) {
+        return presale[_buyer];
     }
-    
-    function hasClosed() public view returns (bool) {
-        return getCurrentTime() > closingTime;
+
+    function giveTokens(address _buyer, uint256 _tokens) external onlyOwner {
+        _deliverTokens(_buyer, _tokens);
+    }
+
+    function setRaised(uint256 _wei) external onlyOwner {
+        raised = _wei;
+    }
+
+    function goalReached() public view returns (bool) {
+        return (raised + weiRaised) >= goal;
     }
 }
